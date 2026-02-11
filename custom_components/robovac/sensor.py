@@ -49,8 +49,8 @@ class RobovacSensorEntity(SensorEntity):
         try:
             self._battery_level = self.hass.data[DOMAIN][CONF_VACS][self.robovac_id].battery_level_value
             self._attr_available = True
-        except:
-            _LOGGER.debug("Failed to get battery level for {}".format(self.robovac_id))
+        except Exception as e:
+            _LOGGER.debug("Failed to get battery level for {}: {}".format(self.robovac_id, e))
             self._battery_level = None
             self._attr_available = False
     
@@ -60,4 +60,3 @@ class RobovacSensorEntity(SensorEntity):
         if self._battery_level is not None:
             return self._battery_level
         return None
-
