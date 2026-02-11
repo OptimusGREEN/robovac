@@ -720,7 +720,6 @@ class TuyaDevice:
             self._dps["106"] = "CONNECTION_FAILED"
             raise ConnectionTimeoutException("Connection timed out")
         loop = asyncio.get_running_loop()
-        loop.create_connection
         self.reader, self.writer = await asyncio.open_connection(sock=sock)
         self._connected = True
 
@@ -752,6 +751,7 @@ class TuyaDevice:
         payload = {"gwId": self.gateway_id, "devId": self.device_id}
         encrypt = False if self.version < (3, 3) else True
         message = Message(Message.GET_COMMAND, payload, encrypt=encrypt, device=self)
+        await self.async_connect()
         self._queue.append(message)
         response = await self.async_recieve(message)
         asyncio.create_task(self.async_update_state(response))
@@ -799,13 +799,21 @@ class TuyaDevice:
         await self.update_entity_state_cb()
 
     async def async_update_state(self, state_message, _=None):
-        if (
-            state_message is not None
-            and state_message.payload
-            and state_message.payload["dps"]
-        ):
-            self._dps.update(state_message.payload["dps"])
-            self._LOGGER.debug("Received updated state {}: {}".format(self, self._dps))
+        if state_message is None:
+            self._LOGGER.debug("async_update_state called with None message")
+            return
+        if not state_message.payload:
+            self._LOGGER.debug("async_update_state: message has no payload")
+            return
+        if not state_message.payload.get("dps"):
+            self._LOGGER.debug(
+                "async_update_state: payload has no 'dps' key: {}".format(
+                    state_message.payload
+                )
+            )
+            return
+        self._dps.update(state_message.payload["dps"])
+        self._LOGGER.debug("Received updated state {}: {}".format(self, self._dps))
 
     @property
     def state(self):
@@ -897,7 +905,9 @@ class TuyaDevice:
 
     async def async_recieve(self, message):
         if self._connected is False:
-            return
+            raise ConnectionException(
+                "Cannot receive response: not connected to {}".format(self)
+            )
 
         if message.expect_response is True:
             try:

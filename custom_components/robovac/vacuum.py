@@ -48,7 +48,6 @@ from homeassistant.const import (
     CONF_IP_ADDRESS,
     CONF_DESCRIPTION,
     CONF_MAC,
-    STATE_UNAVAILABLE,
 )
 
 from .tuyalocalapi import TuyaException
@@ -187,11 +186,11 @@ class RoboVacEntity(StateVacuumEntity):
         return self._attr_ip_address
 
     @property
-    def activity(self) -> str | None:
+    def activity(self) -> VacuumActivity | None:
         if self.tuya_state is None:
-            return STATE_UNAVAILABLE
+            return None
         elif (
-            type(self.error_code) is not None
+            self.error_code is not None
             and self.error_code
             and self.error_code
             not in [
@@ -219,7 +218,7 @@ class RoboVacEntity(StateVacuumEntity):
         """Return the device-specific state attributes of this vacuum."""
         data: dict[str, Any] = {}
 
-        if type(self.error_code) is not None and self.error_code not in [0, "no_error"]:
+        if self.error_code is not None and self.error_code not in [0, "no_error"]:
             data[ATTR_ERROR] = getErrorMessage(self.error_code)
         if (
             self.robovac_supported & RoboVacEntityFeature.CLEANING_AREA
@@ -263,6 +262,9 @@ class RoboVacEntity(StateVacuumEntity):
         self._attr_access_token = item[CONF_ACCESS_TOKEN]
 
         self.update_failures = 0
+        self.error_code = None
+        self.tuya_state = None
+        self.tuyastatus = None
 
         try:
             self.vacuum = RoboVac(
@@ -274,12 +276,15 @@ class RoboVacEntity(StateVacuumEntity):
                 model_code=self.model_code[0:5],
                 update_entity_state=self.pushed_update_handler,
             )
+            self._attr_supported_features = self.vacuum.getHomeAssistantFeatures()
+            self._attr_robovac_supported = self.vacuum.getRoboVacFeatures()
+            self._attr_fan_speed_list = self.vacuum.getFanSpeeds()
         except ModelNotSupportedException:
             self.error_code = "UNSUPPORTED_MODEL"
-
-        self._attr_supported_features = self.vacuum.getHomeAssistantFeatures()
-        self._attr_robovac_supported = self.vacuum.getRoboVacFeatures()
-        self._attr_fan_speed_list = self.vacuum.getFanSpeeds()
+            self._attr_available = False
+            self._attr_supported_features = VacuumEntityFeature(0)
+            self._attr_robovac_supported = RoboVacEntityFeature(0)
+            self._attr_fan_speed_list = []
 
         self._attr_mode = None
         self._attr_consumables = None
@@ -293,32 +298,32 @@ class RoboVacEntity(StateVacuumEntity):
             ],
         )
 
-        self.error_code = None
-        self.tuya_state = None
-        self.tuyastatus = None
-
     async def async_update(self):
         """Synchronise state from the vacuum."""
         if self.error_code == "UNSUPPORTED_MODEL":
+            self._attr_available = False
             return
 
         if self.ip_address == "":
             self.error_code = "IP_ADDRESS"
+            self._attr_available = False
             return
 
         try:
             await self.vacuum.async_get()
             self.update_failures = 0
+            self._attr_available = True
             self.update_entity_values()
         except TuyaException as e:
             self.update_failures += 1
-            _LOGGER.warn(
+            _LOGGER.warning(
                 "Update errored. Current update failure count: {}. Reason: {}".format(
                     self.update_failures, e
                 )
             )
             if self.update_failures >= UPDATE_RETRIES:
                 self.error_code = "CONNECTION_FAILED"
+                self._attr_available = False
 
     async def pushed_update_handler(self):
         self.update_entity_values()

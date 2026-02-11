@@ -17,6 +17,7 @@
 from __future__ import annotations
 import logging
 
+from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform, CONF_IP_ADDRESS
 from homeassistant.core import HomeAssistant
@@ -34,10 +35,13 @@ async def async_setup(hass, entry) -> bool:
     async def update_device(device):
         entry = async_get_config_entry_for_device(hass, device["gwId"])
 
-        if entry == None:
+        if entry is None:
             return
 
-        if not entry.state.recoverable:
+        if entry.state not in (
+            config_entries.ConfigEntryState.LOADED,
+            config_entries.ConfigEntryState.SETUP_RETRY,
+        ):
             return
 
         hass_data = entry.data.copy()
