@@ -47,7 +47,7 @@ class RobovacSensorEntity(SensorEntity):
 
     def update(self):
         try:
-            self._battery_level = self.hass.data[DOMAIN][CONF_VACS][self.robovac_id].battery_level
+            self._battery_level = self.hass.data[DOMAIN][CONF_VACS][self.robovac_id].battery_level_value
             self._attr_available = True
         except:
             _LOGGER.debug("Failed to get battery level for {}".format(self.robovac_id))
